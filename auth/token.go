@@ -221,6 +221,16 @@ func buildHTTPClient(proxyURL string) *http.Client {
 
 
 
+// BuildHTTPClient builds a proxy-aware HTTP client (exported for admin OAuth flow).
+func BuildHTTPClient(proxyURL string) *http.Client {
+	return buildHTTPClient(proxyURL)
+}
+
+// ParseIDToken parses a JWT id_token payload (exported for admin OAuth flow).
+func ParseIDToken(idToken string) *AccountInfo {
+	return parseIDToken(idToken)
+}
+
 // HashAccountID 从 account_id 生成短哈希（用于日志）
 func HashAccountID(accountID string) string {
 	if accountID == "" {

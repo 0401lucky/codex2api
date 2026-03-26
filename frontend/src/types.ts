@@ -224,3 +224,15 @@ export interface CreateAPIKeyResponse {
 export type ApiListResponse<K extends string, T> = {
   [P in K]: T[]
 }
+
+export interface OAuthURLResponse {
+  auth_url: string
+  session_id: string
+}
+
+export interface OAuthExchangeResponse {
+  message: string
+  id: number
+  email: string
+  plan_type: string
+}

@@ -8,6 +8,8 @@ import type {
   CreateAPIKeyResponse,
   HealthResponse,
   MessageResponse,
+  OAuthExchangeResponse,
+  OAuthURLResponse,
   OpsOverviewResponse,
   StatsResponse,
   SystemSettings,
@@ -141,6 +143,11 @@ export const api = {
     request<{ message: string; deleted: number }>('/proxies/batch-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
   testProxy: (url: string, id?: number, lang?: string) =>
     request<ProxyTestResult>('/proxies/test', { method: 'POST', body: JSON.stringify({ url, id, lang }) }),
+  // OAuth
+  generateOAuthURL: (data: { proxy_url?: string; redirect_uri?: string }) =>
+    request<OAuthURLResponse>('/oauth/generate-auth-url', { method: 'POST', body: JSON.stringify(data) }),
+  exchangeOAuthCode: (data: { session_id: string; code: string; state: string; name?: string; proxy_url?: string }) =>
+    request<OAuthExchangeResponse>('/oauth/exchange-code', { method: 'POST', body: JSON.stringify(data) }),
 }
 
 export interface ProxyRow {

@@ -94,6 +94,10 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	api.PATCH("/proxies/:id", h.UpdateProxy)
 	api.POST("/proxies/batch-delete", h.BatchDeleteProxies)
 	api.POST("/proxies/test", h.TestProxy)
+
+	// OAuth 授权流程
+	api.POST("/oauth/generate-auth-url", h.GenerateOAuthURL)
+	api.POST("/oauth/exchange-code", h.ExchangeOAuthCode)
 }
 
 // adminAuthMiddleware 管理接口鉴权中间件

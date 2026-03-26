@@ -24,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, RefreshCw, Trash2, Zap, FlaskConical, Ban, Timer, Upload } from 'lucide-react'
+import { Plus, RefreshCw, Trash2, Zap, FlaskConical, Ban, Timer, Upload, KeyRound, ExternalLink } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 export default function Accounts() {
@@ -49,6 +49,14 @@ export default function Accounts() {
   const [cleaningRateLimited, setCleaningRateLimited] = useState(false)
   const [testingAccount, setTestingAccount] = useState<AccountRow | null>(null)
   const [importing, setImporting] = useState(false)
+  const [addMethod, setAddMethod] = useState<'rt' | 'oauth'>('rt')
+  const [oauthStep, setOauthStep] = useState<'generate' | 'exchange'>('generate')
+  const [oauthSession, setOauthSession] = useState<{ session_id: string; auth_url: string } | null>(null)
+  const [oauthProxyUrl, setOauthProxyUrl] = useState('')
+  const [oauthCallbackUrl, setOauthCallbackUrl] = useState('')
+  const [oauthName, setOauthName] = useState('')
+  const [oauthGenerating, setOauthGenerating] = useState(false)
+  const [oauthCompleting, setOauthCompleting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast, showToast } = useToast()
   const { confirm, confirmDialog } = useConfirmDialog()
@@ -156,6 +164,62 @@ export default function Accounts() {
       showToast(t('accounts.addFailed', { error: getErrorMessage(error) }), 'error')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleOAuthGenerate = async () => {
+    setOauthGenerating(true)
+    try {
+      const result = await api.generateOAuthURL({ proxy_url: oauthProxyUrl })
+      setOauthSession(result)
+      setOauthStep('exchange')
+    } catch (error) {
+      showToast(t('accounts.oauthFailed', { error: getErrorMessage(error) }), 'error')
+    } finally {
+      setOauthGenerating(false)
+    }
+  }
+
+  const handleOAuthComplete = async () => {
+    if (!oauthSession) return
+    let code = ''
+    let state = ''
+    const raw = oauthCallbackUrl.trim()
+    try {
+      const url = new URL(raw)
+      code = url.searchParams.get('code') ?? ''
+      state = url.searchParams.get('state') ?? ''
+    } catch {
+      const qs = raw.includes('?') ? raw.split('?')[1] : raw
+      const params = new URLSearchParams(qs)
+      code = params.get('code') ?? ''
+      state = params.get('state') ?? ''
+    }
+    if (!code || !state) {
+      showToast(t('accounts.oauthParseError'), 'error')
+      return
+    }
+    setOauthCompleting(true)
+    try {
+      const result = await api.exchangeOAuthCode({
+        session_id: oauthSession.session_id,
+        code,
+        state,
+        name: oauthName.trim() || undefined,
+        proxy_url: oauthProxyUrl.trim() || undefined,
+      })
+      showToast(result.email ? t('accounts.oauthSuccess', { email: result.email }) : t('accounts.oauthSuccessNoEmail'))
+      setShowAdd(false)
+      setAddMethod('rt')
+      setOauthStep('generate')
+      setOauthSession(null)
+      setOauthCallbackUrl('')
+      setOauthName('')
+      void reload()
+    } catch (error) {
+      showToast(t('accounts.oauthFailed', { error: getErrorMessage(error) }), 'error')
+    } finally {
+      setOauthCompleting(false)
     }
   }
 
@@ -580,40 +644,163 @@ export default function Accounts() {
           show={showAdd}
           title={t('accounts.addTitle')}
           contentClassName="sm:max-w-[640px]"
-          onClose={() => setShowAdd(false)}
+          onClose={() => {
+            setShowAdd(false)
+            setAddMethod('rt')
+            setOauthStep('generate')
+            setOauthSession(null)
+            setOauthCallbackUrl('')
+            setOauthName('')
+          }}
           footer={(
             <>
-              <Button variant="outline" onClick={() => setShowAdd(false)}>{t('common.cancel')}</Button>
-              <Button onClick={() => void handleAdd()} disabled={submitting || !addForm.refresh_token.trim()}>
-                {submitting ? t('accounts.adding') : t('accounts.submit')}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowAdd(false)
+                  setAddMethod('rt')
+                  setOauthStep('generate')
+                  setOauthSession(null)
+                  setOauthCallbackUrl('')
+                  setOauthName('')
+                }}
+              >
+                {t('common.cancel')}
               </Button>
+              {addMethod === 'rt' ? (
+                <Button onClick={() => void handleAdd()} disabled={submitting || !addForm.refresh_token.trim()}>
+                  {submitting ? t('accounts.adding') : t('accounts.submit')}
+                </Button>
+              ) : oauthStep === 'generate' ? (
+                <Button onClick={() => void handleOAuthGenerate()} disabled={oauthGenerating}>
+                  {oauthGenerating ? t('accounts.oauthGenerating') : t('accounts.oauthGenerateBtn')}
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => void handleOAuthComplete()}
+                  disabled={oauthCompleting || !oauthCallbackUrl.trim()}
+                >
+                  {oauthCompleting ? t('accounts.oauthCompleting') : t('accounts.oauthCompleteBtn')}
+                </Button>
+              )}
             </>
           )}
         >
-          <div className="space-y-4">
-            <div>
-              <label className="block mb-2 text-sm font-semibold text-muted-foreground">{t('accounts.refreshTokenLabel')} *</label>
-              <textarea
-                className="w-full min-h-[160px] p-3 border border-input rounded-xl bg-background text-sm resize-y focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder={t('accounts.refreshTokenPlaceholder')}
-                value={addForm.refresh_token}
-                onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-                  setAddForm((form) => ({ ...form, refresh_token: event.target.value }))
-                }
-                rows={6}
-              />
-            </div>
-            <div>
-              <label className="block mb-2 text-sm font-semibold text-muted-foreground">{t('accounts.proxyUrl')}</label>
-              <Input
-                placeholder={t('accounts.proxyUrlPlaceholder')}
-                value={addForm.proxy_url}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  setAddForm((form) => ({ ...form, proxy_url: event.target.value }))
-                }
-              />
-            </div>
+          {/* Tab switcher */}
+          <div className="flex gap-1 p-1 mb-5 rounded-xl bg-muted/50 border border-border">
+            <button
+              onClick={() => setAddMethod('rt')}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition-all ${
+                addMethod === 'rt'
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <RefreshCw className="size-3.5" />
+              {t('accounts.addMethodRT')}
+            </button>
+            <button
+              onClick={() => { setAddMethod('oauth'); setOauthStep('generate'); setOauthSession(null); setOauthCallbackUrl('') }}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition-all ${
+                addMethod === 'oauth'
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <KeyRound className="size-3.5" />
+              {t('accounts.addMethodOAuth')}
+            </button>
           </div>
+
+          {addMethod === 'rt' ? (
+            <div className="space-y-4">
+              <div>
+                <label className="block mb-2 text-sm font-semibold text-muted-foreground">{t('accounts.refreshTokenLabel')} *</label>
+                <textarea
+                  className="w-full min-h-[160px] p-3 border border-input rounded-xl bg-background text-sm resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder={t('accounts.refreshTokenPlaceholder')}
+                  value={addForm.refresh_token}
+                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                    setAddForm((form) => ({ ...form, refresh_token: event.target.value }))
+                  }
+                  rows={6}
+                />
+              </div>
+              <div>
+                <label className="block mb-2 text-sm font-semibold text-muted-foreground">{t('accounts.proxyUrl')}</label>
+                <Input
+                  placeholder={t('accounts.proxyUrlPlaceholder')}
+                  value={addForm.proxy_url}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    setAddForm((form) => ({ ...form, proxy_url: event.target.value }))
+                  }
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {oauthStep === 'generate' ? (
+                <>
+                  <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                    <p className="font-semibold text-foreground mb-1">{t('accounts.oauthStep1Title')}</p>
+                    <p>{t('accounts.oauthStep1Desc')}</p>
+                  </div>
+                  <div>
+                    <label className="block mb-2 text-sm font-semibold text-muted-foreground">{t('accounts.oauthNameLabel')}</label>
+                    <Input
+                      placeholder={t('accounts.oauthNamePlaceholder')}
+                      value={oauthName}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setOauthName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-2 text-sm font-semibold text-muted-foreground">{t('accounts.oauthProxyUrl')}</label>
+                    <Input
+                      placeholder={t('accounts.oauthProxyUrlPlaceholder')}
+                      value={oauthProxyUrl}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setOauthProxyUrl(e.target.value)}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                    <p className="font-semibold text-foreground mb-1">{t('accounts.oauthStep2Title')}</p>
+                    <p>{t('accounts.oauthStep2Desc')}</p>
+                  </div>
+                  {oauthSession && (
+                    <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+                      <p className="text-xs font-semibold text-muted-foreground mb-2">{t('accounts.oauthOpenLink')}</p>
+                      <a
+                        href={oauthSession.auth_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline break-all"
+                      >
+                        <ExternalLink className="size-3.5 shrink-0" />
+                        {t('accounts.oauthOpenLink')}
+                      </a>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block mb-2 text-sm font-semibold text-muted-foreground">{t('accounts.oauthCallbackUrlLabel')}</label>
+                    <Input
+                      placeholder={t('accounts.oauthCallbackUrlPlaceholder')}
+                      value={oauthCallbackUrl}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setOauthCallbackUrl(e.target.value)}
+                    />
+                    <p className="mt-1.5 text-xs text-muted-foreground">{t('accounts.oauthCallbackUrlHint')}</p>
+                  </div>
+                  <button
+                    onClick={() => { setOauthStep('generate'); setOauthSession(null); setOauthCallbackUrl('') }}
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                  >
+                    {t('accounts.oauthRestart')}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </Modal>
 
         {testingAccount && (
