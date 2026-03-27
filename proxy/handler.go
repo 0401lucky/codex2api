@@ -297,6 +297,9 @@ func (h *Handler) Responses(c *gin.Context) {
 	sessionID := ResolveSessionID(c.GetHeader("Authorization"), rawBody)
 	reasoningEffort := extractReasoningEffort(rawBody)
 	serviceTier := extractServiceTier(rawBody)
+	if serviceTier != "" {
+		c.Set("x-service-tier", serviceTier)
+	}
 
 	// 2. 注入/修正 Codex 必需字段
 	codexBody := rawBody
@@ -620,6 +623,9 @@ func (h *Handler) ChatCompletions(c *gin.Context) {
 	isStream := gjson.GetBytes(rawBody, "stream").Bool()
 	reasoningEffort := extractReasoningEffort(rawBody)
 	serviceTier := extractServiceTier(rawBody)
+	if serviceTier != "" {
+		c.Set("x-service-tier", serviceTier)
+	}
 
 	// 2. 翻译请求：OpenAI Chat → Codex Responses
 	codexBody, err := TranslateRequest(rawBody)
