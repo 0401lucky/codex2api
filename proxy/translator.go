@@ -33,6 +33,7 @@ func TranslateRequest(rawJSON []byte) ([]byte, error) {
 
 	// 4. 统一 service tier 字段命名，保留给上游用于 fast 调度
 	result = normalizeServiceTierField(result)
+	result = sanitizeServiceTierForUpstream(result)
 
 	// 5. 删除 Codex 不支持的字段
 	unsupportedFields := []string{
@@ -76,12 +77,35 @@ func normalizeServiceTierField(body []byte) []byte {
 	return body
 }
 
+func sanitizeServiceTierForUpstream(body []byte) []byte {
+	tier := strings.TrimSpace(gjson.GetBytes(body, "service_tier").String())
+	if tier == "" {
+		body, _ = sjson.DeleteBytes(body, "serviceTier")
+		return body
+	}
+
+	switch tier {
+	case "auto", "default", "flex", "priority", "scale":
+		body, _ = sjson.DeleteBytes(body, "serviceTier")
+		return body
+	default:
+		body, _ = sjson.DeleteBytes(body, "service_tier")
+		body, _ = sjson.DeleteBytes(body, "serviceTier")
+		return body
+	}
+}
+
 func resolveServiceTier(actualTier, requestedTier string) string {
+	requestedTier = strings.TrimSpace(requestedTier)
+	if requestedTier == "fast" {
+		return requestedTier
+	}
+
 	actualTier = strings.TrimSpace(actualTier)
 	if actualTier != "" {
 		return actualTier
 	}
-	return strings.TrimSpace(requestedTier)
+	return requestedTier
 }
 
 // convertMessagesToInput 将 OpenAI messages 格式转换为 Codex input 格式

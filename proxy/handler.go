@@ -318,8 +318,9 @@ func (h *Handler) Responses(c *gin.Context) {
 	if re := gjson.GetBytes(codexBody, "reasoning_effort"); re.Exists() && !gjson.GetBytes(codexBody, "reasoning.effort").Exists() {
 		codexBody, _ = sjson.SetBytes(codexBody, "reasoning.effort", re.String())
 	}
+	codexBody = sanitizeServiceTierForUpstream(codexBody)
 
-	// 删除 Codex 不支持的参数（保留 service_tier 供上游 fast 调度）
+	// 删除 Codex 不支持的参数
 	unsupportedFields := []string{
 		"max_output_tokens", "max_tokens", "max_completion_tokens",
 		"temperature", "top_p", "frequency_penalty", "presence_penalty",

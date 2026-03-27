@@ -26,13 +26,29 @@ func TestResolveServiceTier(t *testing.T) {
 	if got := resolveServiceTier("", "fast"); got != "fast" {
 		t.Fatalf("expected requested tier fallback, got %q", got)
 	}
+	if got := resolveServiceTier("default", "fast"); got != "fast" {
+		t.Fatalf("expected requested fast to win for logging, got %q", got)
+	}
 }
 
-func TestTranslateRequest_PreservesServiceTier(t *testing.T) {
+func TestSanitizeServiceTierForUpstream_DropsFast(t *testing.T) {
+	raw := []byte(`{
+		"model":"gpt-5.4",
+		"service_tier":"fast"
+	}`)
+
+	got := sanitizeServiceTierForUpstream(raw)
+
+	if gjson.GetBytes(got, "service_tier").Exists() {
+		t.Fatal("unsupported fast tier should not be forwarded upstream")
+	}
+}
+
+func TestTranslateRequest_PreservesSupportedServiceTier(t *testing.T) {
 	raw := []byte(`{
 		"model":"gpt-5.4",
 		"messages":[{"role":"user","content":"hello"}],
-		"serviceTier":"fast",
+		"serviceTier":"priority",
 		"reasoning_effort":"high"
 	}`)
 
@@ -41,8 +57,8 @@ func TestTranslateRequest_PreservesServiceTier(t *testing.T) {
 		t.Fatalf("TranslateRequest returned error: %v", err)
 	}
 
-	if tier := gjson.GetBytes(got, "service_tier").String(); tier != "fast" {
-		t.Fatalf("service_tier mismatch: got %q want %q", tier, "fast")
+	if tier := gjson.GetBytes(got, "service_tier").String(); tier != "priority" {
+		t.Fatalf("service_tier mismatch: got %q want %q", tier, "priority")
 	}
 	if gjson.GetBytes(got, "serviceTier").Exists() {
 		t.Fatal("serviceTier should not be present after translation")
